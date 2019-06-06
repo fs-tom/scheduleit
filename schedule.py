@@ -45,7 +45,7 @@ def sampleData(small=True):
     ##this is one cough-syrup addled way to do it
     ##with dictionary comprehensions.
     csts   = {x:'cst' for x in range(0,55)}
-    dcrfs  = {x:'cst' for x in range(55,61)}
+    dcrfs  = {x:'dcrf' for x in range(55,61)}
     cres   = {x:'cre' for x in range(61, 65)}
     srs    = {x:'sr' for x in range(65,77)}
     hrfs   = {x:'hrf' for x in range(77,87)}
