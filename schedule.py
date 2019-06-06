@@ -130,15 +130,34 @@ def buildModel(params):
     #variables
 
     print(len(ws))
-## assign(m,u,w) # binary decision variable determining whether training
-## team m is assigned to train unit u, during week w of the schedule.
 
+    ## unit_assigned(m,w) #  decision variable determining whether training
+    ## team m, during week w of the schedule, results in a trained unit.
+    ##unit 0 is implicitly the null unit (e.g. no trainining), where
+    ##units 1..total_units indicate a unit index.
 
-   #This lets us say "we want to create family of variables, across the
-   #index m_u_w, with similar properties (in this case they're binary)
+    #This lets us say "we want to create family of variables, across the
+    #index m_u_w, with similar properties (in this case they're binary)
+    unit_assigned = LpVariable.dicts('unit_assigned',utils.product(ms,ws),
+                              lowBound = 0.0, upBound = total_units)
+
+    #add a var to track unit training
+
+    ##introduce a binary decision variable to decide whether
+    ##unit u was trained by week w:
+    trained = LpVariable.dicts('assign',utils.product(us,ws),
+                                lowBound = 0.0, upBound = 1, cat=LpInteger)
+    for (u,w) in utils.product(us,ws):
+        sched += lpSum(trained[u,w]*u <= unit_assigned[m,w]
+                        for m in ms)
+
     assign = LpVariable.dicts('assign',utils.product(ms,us,ws),
-                              lowBound = 0.0, upBound = 1.0, cat=LpInteger
-                              )
+                              lowBound = 0.0, upBound = 1)
+    for (m,w) in product(ms,ws):
+        units = {u for u in us if u > 0}
+        mult = {u:1 / u for u in units}
+        sched += assign[m,u,w] == lpSum((unit_assigned[m,w] * mult[u])
+                                        for u in units)
 
     #Objective function: z = assigncost = sum(m,u,w)assign(m,u,w)
     #min z, e.g. minimize the total number of assignments
@@ -159,12 +178,6 @@ def buildModel(params):
     #only one training event allowed per week
     for (m,w) in events.keys():
         sched += events[m,w] <= 1
-
-    #add a var to track unit training
-
-    trained = LpVariable.dicts("trained",utils.product(us,ws))
-    for (u,w) in trained.keys():
-        sched += trained[u,w] == lpSum((assign[m,u,w] for m in ms))
 
     #unit training credits by interval
     #We account for training intervals by
