@@ -58,7 +58,7 @@ def sampleData(small=True):
     if small == True :
         total_units = 1
     else:
-        total_units = 2 #len(unit_type)
+        total_units =  len(unit_type)
     #range of unit ids...
     us = range(total_units)
     # training interval relative to type, weeks
@@ -129,39 +129,16 @@ def buildModel(params):
     sched = LpProblem("Sched", LpMinimize)
     #variables
 
-    # Our range of active unit indices
-    # We'll use this to coerce the unit 0 to correspond to
-    # a null unit, or unassigned value.
-    units = range(1,total_units + 1)
-    unassigned = 0
-
-    ## unit_assigned(m,w) #  decision variable determining whether training
-    ## team m, during week w of the schedule, results in a trained unit.
-    ##unit 0 is implicitly the null unit (e.g. no trainining), where
-    ##units 1..total_units indicate a unit index.
-
-    #This lets us say "we want to create family of variables, across the
-    #index m_u_w, with similar properties (in this case they're binary)
-    unit_assigned = LpVariable.dicts('unit_assigned',utils.product(ms,ws),
-                              lowBound = 0.0, upBound = total_units + 1)
 
     #add a var to track unit training
 
     ##introduce a binary decision variable to decide whether
-    ##unit u was trained by week w:
-    trained = LpVariable.dicts('trained',utils.product(units,ws),
+    ##team m trained someone during week w:
+    trained = LpVariable.dicts('trained',utils.product(ms,ws),
                                 lowBound = 0.0, upBound = 1, cat=LpInteger)
-    # these are all assignable units, vs. the unassigned unit.
-    # if the unit is trained, it's non-zero index must be =
-    # to sum of the unit_assigned(m,w) for any concurrent training
-    # assignment.  Since unit_assigned(m,w) can take on 0, this allows
-    # slack, where the only non-zero number must correspond with the
-    # binary gate indicated by trained(u,w).  Thus, unit_assigned
-    # may only take on non-zero values for assignable unit indices,
-    # when a trainable unit it chosen for training via trained(u,w).
-    for w in ws:
-        sched += lpSum((trained[u,w] * u) for u in units) == \
-                 lpSum(unit_assigned[m,w] for m in ms)
+
+    #for w in ws:
+    #    sched += lpSum(trained[m,w] for m in ms) <= 1
 
     #We have a linear variable that only takes on binary values
     #of 0 or 1 to indicate the assignment of mtt m, to unit u,
@@ -177,14 +154,16 @@ def buildModel(params):
     #for non-zero assignment.  Dividing by the unit index
     #projects the index onto the set {0,1}, giving us an implicit
     #integer variable.
-    assign = LpVariable.dicts('assign',utils.product(ms,units,ws),
+    assign = LpVariable.dicts('assign',utils.product(ms,us,ws),
                               lowBound = 0.0, upBound = 1)
     for (m,w) in product(ms,ws):
-        #pulp makes us do this, otherwise it'll complain if we inline
-        #the division...
-        mult = {u:1 / u for u in units}
-        sched += assign[m,u,w] == lpSum((unit_assigned[m,w] * mult[u])
-                                        for u in units)
+        #number of units assigned to m at w must by = whether m trained at w
+        sched +=  lpSum(assign[m,u,w] for u in us) == trained[m,w]
+        for u in us:
+            #unit assigned to m at w must be either 0 or 1, depending
+            #on trained.  If trained is 0, assign == 0, else
+            #if trained is 1, assign is either 0|1.
+            sched += assign[m,u,w] <= trained[m,w]
 
 
     #Objective function: z = assigncost = sum(m,u,w)assign(m,u,w)
@@ -199,13 +178,14 @@ def buildModel(params):
     #helper variables:
     #mtt training events per week
     #events(m,w) = sum(u)assign(m,u,w) forall m in ms,w in ws, u in us
-    events = LpVariable.dicts("events",utils.product(ms,ws))
-    for (m,w) in events.keys():
-        sched += events[m,w]  == lpSum((assign[m,u,w] for u in units))
+#I think this is controlled directly by trained now...
+    #events = LpVariable.dicts("events",utils.product(ms,ws))
+    #for (m,w) in events.keys():
+    #    sched += events[m,w]  == lpSum((assign[m,u,w] for u in us))
 
     #only one training event allowed per week
-    for (m,w) in events.keys():
-        sched += events[m,w] <= 1
+#    for (m,w) in events.keys():
+#        sched += events[m,w] <= 1
 
     #unit training credits by interval
     #We account for training intervals by
@@ -221,13 +201,17 @@ def buildModel(params):
     #infeasible in practice.  Something like, 1/2 the interval is the
     #lower bound.
 
-    wait = LpVariable.dicts("wait",utils.product(units,ws),lowBound = 0.0)
-    for u in units:
+    unit_trained = LpVariable.dicts("unit_trained",utils.product(us,ws),lowBound = 0.0, upBound = 1.0)
+    for (u,w) in unit_trained.keys():
+        sched += unit_trained[u,w] == lpSum(assign[m,u,w] for m in ms)
+
+    wait = LpVariable.dicts("wait",utils.product(us,ws),lowBound = 0.0)
+    for u in us:
         #our unit_type index is 0-based, we need to offset by 1 in the
         #formulation.
-        interval = interval_type[unit_type[u-1]]
+        interval = interval_type[unit_type[u]]
         for w in utils.butlast(ws):
-            sched += wait[u,w + 1] == wait[u,w] + 1 - trained[u,w]*(interval + 1)
+            sched += wait[u,w + 1] == wait[u,w] + 1 - unit_trained[u,w]*(interval + 1)
 
     #we can train a unit more frequently, but not lapse in training.
     #Wait times cannot exceed mandated training intervals.
@@ -236,21 +220,34 @@ def buildModel(params):
 
     for (u,w) in wait.keys():
         #we need to offset our unit index, since unit_type is 0 based.
-        sched += wait[u,w] <= interval_type[unit_type[u-1]]
+        sched += wait[u,w] <= interval_type[unit_type[u]]
+
+    waitcost = LpVariable('waitcost')
+    sched += waitcost == lpSum(wait[u,w] for (u,w) in wait.keys())
+
+
+    objective = LpVariable('assign plus wait')
+
+    #we want to minimize assignments, maximize wait, so use negative
+    #wait and emphasize the importance of assignment.
+
+    sched += objective == 100 * assigncost - waitcost
 
     #goal is to minimize the total number of assignments we need.
     #This should induce maximal wait times as well.
-    sched.setObjective(assigncost)
+    sched.setObjective(objective)
+    #sched.setObjective(assigncost)
     def getsolution():
         res = {}
         for (m,u,w) in assign.keys():
             if value(assign[m,u,w]) > 0.0 :
                 res[m,u,w] = value(assign[m,u,w])
         return {'assigned':res, #dictvals(assign),
-                'unit_assigned':dictvals(unit_assigned),
                 'trained':dictvals(trained),
                 'wait':dictvals(wait),
-                'assigncost':value(assigncost)}
+                'assigncost':value(assigncost),
+                'waitcost':value(waitcost),
+                'objective':value(objective)}
     return (sched,getsolution)
 
 
@@ -273,6 +270,11 @@ def main(run = False):
         res = getsolution()
         lastsolution = res
         return res
+
+def instance(small = False):
+    params = sampleData(small=small)
+    sched,getsolution = buildModel(params)
+    return {"model":sched, "solution":getsolution}
 ##
 ##def spit(obj,path = "obj.py"):
 ##    with open(path, 'wb') as outfile:
