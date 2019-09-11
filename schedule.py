@@ -30,9 +30,9 @@ def sampleData(small=True):
         MTT = 10
     #total weeks
     if small == True:
-        WKS = 156
+        WKS = 156 // 3 #156
     else:
-        WKS = 156
+        WKS = 156 // 3 #156
     years = WKS//52
     #mtt teams
     ms = range(MTT)
