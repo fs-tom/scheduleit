@@ -1,5 +1,28 @@
 (ns scheduleit.sampledata)
 
+(defn cart [colls]
+  (if (empty? colls)
+    '(())
+    (for [more (cart (rest colls))
+          x (first colls)]
+      (vec (cons  x more)))))
+
+(defn product [& colls]
+  (cart colls))
+
+;; #rough packaging of information we'll use to
+;; #define a MIP problem instance.  We'll refine this
+;; #to closely match the data we pull out of Excel going forward.
+
+(defmacro for-map [bindings & body]
+  `(into {} (for ~bindings ~@body)))
+
+(defn indexed-value
+  ([ upper v] (indexed-value  0 upper v))
+  ([ lower upper v]
+   (into {} (for [x (range lower upper)]
+              [x v]))))
+
 (defn sample-data [& {:keys [small?] :or {small? true}}]
   (let [
         ;;     This is just some lame stuff.
