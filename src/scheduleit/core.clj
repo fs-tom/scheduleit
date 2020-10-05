@@ -1,5 +1,6 @@
 ;;Re-implementation of the scheduling problem.
-(ns scheduleit.core)
+(ns scheduleit.core
+  (:require [scheduleit.sampledata :as data]))
 
 ;;Before we had a MIP to schedule teams to units over time.
 ;;Now we will schedule via a covering problem and use
@@ -89,6 +90,7 @@
         [m u]  mu]
     {:time t :mtt m :unit u}))
 
+;;setting up a demand signal.
 
 ;;define a move...
 ;;we can randomly assign a team to a unit at a random
@@ -139,11 +141,17 @@
 ;;assigned(m,u,t)
 ;;we can derive some information.
 
+;;total units assigned
+
 ;;compute the training intervals for units in the state.
 (defn training-intervals [xs])
 
+
+
 ;;compute the amount of units supplied by t by mission.
-(defn supply [xs])
+(defn supply [xs]
+  
+  )
 
 
 [-1 -1 -1 -1 -1 -1 10] ;;unit 0 is trained by mtt 10 at t=6

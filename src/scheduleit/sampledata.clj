@@ -23,6 +23,10 @@
    (into {} (for [x (range lower upper)]
               [x v]))))
 
+(defn vrange [& args] (vec (apply range args)))
+
+(def +types+  #{"cst" "dcrf" "cre" "sr" "hrf" "cerfp"})
+
 (defn sample-data [& {:keys [small?] :or {small? true}}]
   (let [
         ;;     This is just some lame stuff.
@@ -30,14 +34,13 @@
         MTT (if small? 1 10)
         ;; #total weeks
         WKS (if small? 52 156)
-
         years (quot WKS 52)
         ;;     #mtt teams
-        ms  (range MTT)
+        ms  (vrange MTT)
         ;; weeks
-        ws (range WKS)
+        ws (vrange WKS)
         ;;     #unit types
-        types #{"cst" "dcrf" "cre" "sr" "hrf" "cerfp"}
+        types +types+
         ;;     #mapping of unit->type
         ;;     this is one cough-syrup addled way to do it
         ;;     with dictionary comprehensions.
@@ -52,7 +55,7 @@
         ;;     #lame total unit count
         total-units (if small? 1 #_10 (count unit-type))
         ;;     #range of unit ids...
-        us (range total-units)
+        us (vrange total-units)
         ;;     # training interval relative to type, weeks
         interval-type   {"sr"    13
                          "cre"   52
@@ -60,7 +63,7 @@
                          "cst"   78
                          "hrf"   78
                          "cerfp" 78}
-        ys   (range years)
+        ys   (vrange years)
         constant-demands  {"sr" 6 "dcrf" 6  "hrf" 10 "cerfp" 17}
         static-demands (->> (for [[t y] (product types ys)
                                   :when (constant-demands t)]
@@ -81,7 +84,7 @@
      :ws ws,
      :types types,
      :total-units total-units,
-     :us  (range total-units),
+     :us  (vrange total-units),
      :unit-type unit-type,
      :interval-type interval-type,
      :msn-demand yearly-demands}))
