@@ -55,10 +55,8 @@
 
 ;;basically a bidirectional graph...
 (defn init-solution  [tmax team-count unit-count]
-  (->solution  (into {} (for [team-count (range team-count)]
-                          [team-count {}]))
-               (into {} (for [u (range unit-count)]
-                          [u {}]))
+  (->solution  (vec (repeat team-count {}))
+               (vec (repeat unit-count {}))
                {}
                tmax))
 
@@ -144,14 +142,17 @@
 ;;total units assigned
 
 ;;compute the training intervals for units in the state.
-(defn training-intervals [xs])
-
-
+;;How much time has elapsed since the previous interval?
+;;If we are smart, we can keep the max over sub intervals?
+;;We know when the units are active.
+(defn training-intervals [^solution sol u]
+  )
 
 ;;compute the amount of units supplied by t by mission.
-(defn supply [xs]
-  
-  )
+(defn supply [xs])
+
+(defn data->solution [{:keys [total-units MTT WKS]}]
+  (init-solution WKS MTT total-units))
 
 
 [-1 -1 -1 -1 -1 -1 10] ;;unit 0 is trained by mtt 10 at t=6
