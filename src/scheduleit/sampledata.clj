@@ -70,9 +70,9 @@
                               [[t y] (constant-demands t) ])
                             (into {}))
 
-        variable-demands  {["cre" 1] 1
-                           ["cre" 2] 4
-                           ["cre" 3] 2}
+        variable-demands  {["cre" 0] 1
+                           ["cre" 1] 4
+                           ["cre" 2] 2}
 
         ;;     #all the yearly demands.
         ;;     #yearly demands can be trivially translated to weekly

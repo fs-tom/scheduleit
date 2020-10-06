@@ -155,5 +155,122 @@
   (init-solution WKS MTT total-units))
 
 
-[-1 -1 -1 -1 -1 -1 10] ;;unit 0 is trained by mtt 10 at t=6
+;;so we have our demand and the solution.
+;;Properties of a good solution:
+
+;;Minimal TDY's....
+
+;;That means minimal assignments of
+;;MTT's to units.
+
+;;Probably minimal maximum TDY count?
+;;  We don't want certain MTTs to have more TDYs
+;;  than others.
+
+;;Maximum distance between TDYs
+
+;;Maximum distance between training events for
+;;units
+
+;;No TDY's on restricted dates.
+
+;;We must 
+
+;;Fundamental questions:
+
+;;How many trained units do I have at a given time?
+;;How many demands for trained units of a type do I have?
+
+
+;;Do my trained units exceed my demands?
+;;  What are my demands?
+
+;;A rambling way to get from the encoded demand signal of
+;;[[type year] quantity] into a vector indexed by
+;;week, where the keys correspond to type, vals are quantity.
+;;Adds a redundant :week key for readability.
+(defn render-demand [{:keys [msn-demand]}]
+  (->> (for [[[demand-type year] quantity] (sort-by (comp second key) msn-demand)
+             week (range (* year 52) (* (inc year) 52))]
+         [week {:type demand-type :quantity quantity :year year}])
+       (group-by first)
+       (sort-by key)
+       (reduce (fn [acc [week xs]]
+                 (->> xs
+                      (sort-by (comp :type second))
+                      (reduce (fn [m [_ {:keys [type quantity]}]]
+                                (assoc m type quantity)) {:week week})
+                      (conj acc))) [])))
+
+
+;;Since demands vary by type, we have multiple trained units by type, so
+;;we really only need to compare like populations (they aren't interchangeable).
+
+;;May even have sub problems....hmm.  Perhaps a hierarchical objective function
+;;where we solve the mission training requirements first, then solve the rest?
+
+
+;;naive way to compute available for each day is to reduce over all units by type
+;;We need to know who as been trained.  How do we know if a unit is trained on day
+;;t?  If it's wait time is positive, or the time since last event is < the
+;;training interval type.  If we train a unit, we can register the interval
+;;it will be trained for based on its training interval type.
+;;Assigning a mtt to train a unit will also update the unit's availability.
+;;So total availability at any given time is finding the intersecting unit
+;;availability samples for that time.
+(defn compute-available [s d]
+  (let [utype  (d :unit-type)
+        itype  (d :interval-type)]
+    (reduce (fn [acc unit]
+              (let [interval (-> unit utype itype)])))
+    ))
+
+(defn intervals [xs]
+  (reduce (fn [acc [l r]]
+            (assoc acc l r)) (sorted-map) xs))
+
+;;in lieu of data.avl, we can use these for now.
+;;tim pratley from
+;;https://stackoverflow.com/questions/1981859/finding-keys-closest-to-a-given-value-for-clojure-sorted-maps
+;;Revised to allow for intervallic searching...
+(defn abs [x] (if (neg? x) (- x) x))
+#_
+(defn find-closest [sm k]
+  (if-let [ab (first (rsubseq sm <= k))]
+    (let [a (key ab)]
+      (if (= a k)
+        ab
+        (if-let [bc  (first (subseq sm >= k))]
+          (let [b (key bc)]
+            (if (< (abs (- k b)) (abs (- k a)))
+              bc
+            ab)))))
+    (first (subseq sm >= k))))
+
+;;slow but portable version...
+#_
+(defn intersection [sm k]
+  (when-let [ab (first (rsubseq sm <= k))]
+    (when (< k (val ab))
+      ab)))
+
+;;fast but not portable version...
+;;doing naive o(N) over some intervals (as vecs at least)
+;;appears slower.
+(defn intersection [sm k]
+  (when-let [ab (when-let [xs (.seqFrom ^clojure.lang.PersistentTreeMap sm k false)]
+                  (.first ^clojure.lang.ISeq xs))]
+    (when (<= k (.getValue ^java.util.Map$Entry ab))
+      ab)))
+
+;;substantially slower, but "may" be faster on cljs...
+;; (set! *unchecked-math* true)
+;; (defn raw-intersection [intervals ^long k]
+;;   (reduce (fn [acc ^clojure.lang.Indexed lr]
+;;             (if (>= k ^long (.nth lr 0))
+;;               (if     (<= k ^long (.nth lr 1))
+;;                 (reduced lr)
+;;                 acc)
+;;               acc)) nil intervals))
+;; (set! *unchecked-math* false)
 
