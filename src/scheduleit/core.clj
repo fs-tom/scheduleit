@@ -1,6 +1,7 @@
 ;;Re-implementation of the scheduling problem.
 (ns scheduleit.core
-  (:require [scheduleit.sampledata :as data]))
+  (:require [scheduleit [sampledata :as data]
+                        [util :as util]]))
 
 ;;Before we had a MIP to schedule teams to units over time.
 ;;Now we will schedule via a covering problem and use
@@ -51,6 +52,9 @@
 {:assignments []
  :demand      []}
 
+;;teams   - {team {t unit}}, actually []
+;;units   - {unit {t team}}, actually []
+;;actives - {t    {team unit}}
 (defrecord solution [teams units actives tmax])
 
 ;;basically a bidirectional graph...
@@ -209,7 +213,6 @@
 ;;May even have sub problems....hmm.  Perhaps a hierarchical objective function
 ;;where we solve the mission training requirements first, then solve the rest?
 
-
 ;;naive way to compute available for each day is to reduce over all units by type
 ;;We need to know who as been trained.  How do we know if a unit is trained on day
 ;;t?  If it's wait time is positive, or the time since last event is < the
@@ -218,59 +221,41 @@
 ;;Assigning a mtt to train a unit will also update the unit's availability.
 ;;So total availability at any given time is finding the intersecting unit
 ;;availability samples for that time.
-(defn compute-available [s d]
-  (let [utype  (d :unit-type)
-        itype  (d :interval-type)]
-    (reduce (fn [acc unit]
-              (let [interval (-> unit utype itype)])))
-    ))
+
+;;lame.  we can hide behind a protocol at some point if
+;;we find arrays better suited...
+(defn map-range [v from to f]
+  (reduce (fn [acc idx] (assoc acc idx (f (acc idx))))
+          v (range from (inc to))))
+
+;;If we have a selection of unit training intervals, it's just matter of
+;;finding out which intervals intersect at time t, and then projecting those
+;;units onto unit types.
+(defn zeroes [n] (vec (repeat n 0)))
+(alter-var-root #'zeroes util/memo-1)
+
+;;Alernately, we can just scrape out all the unit training intervals
+;;and rasterize them onto a discrete vector of counts.
+(defn compute-available
+  [{:keys [units] :as s}
+   {:keys [unit-type interval-type WKS
+           types type->units] :as d}]
+  (let [clear-vec (zeroes WKS)]
+    (reduce-kv
+     (fn [acc type us]
+       (->> us
+            (reduce (fn [acc u]
+                      (reduce-kv (fn [v l r]
+                                   (map-range v l r unchecked-inc))
+                                 acc
+                                 (units u)))
+                    clear-vec)
+            (assoc acc type)))
+            {} type->units)))
 
 (defn intervals [xs]
   (reduce (fn [acc [l r]]
             (assoc acc l r)) (sorted-map) xs))
 
-;;in lieu of data.avl, we can use these for now.
-;;tim pratley from
-;;https://stackoverflow.com/questions/1981859/finding-keys-closest-to-a-given-value-for-clojure-sorted-maps
-;;Revised to allow for intervallic searching...
-(defn abs [x] (if (neg? x) (- x) x))
-#_
-(defn find-closest [sm k]
-  (if-let [ab (first (rsubseq sm <= k))]
-    (let [a (key ab)]
-      (if (= a k)
-        ab
-        (if-let [bc  (first (subseq sm >= k))]
-          (let [b (key bc)]
-            (if (< (abs (- k b)) (abs (- k a)))
-              bc
-            ab)))))
-    (first (subseq sm >= k))))
-
-;;slow but portable version...
-#_
-(defn intersection [sm k]
-  (when-let [ab (first (rsubseq sm <= k))]
-    (when (< k (val ab))
-      ab)))
-
-;;fast but not portable version...
-;;doing naive o(N) over some intervals (as vecs at least)
-;;appears slower.
-(defn intersection [sm k]
-  (when-let [ab (when-let [xs (.seqFrom ^clojure.lang.PersistentTreeMap sm k false)]
-                  (.first ^clojure.lang.ISeq xs))]
-    (when (<= k (.getValue ^java.util.Map$Entry ab))
-      ab)))
-
-;;substantially slower, but "may" be faster on cljs...
-;; (set! *unchecked-math* true)
-;; (defn raw-intersection [intervals ^long k]
-;;   (reduce (fn [acc ^clojure.lang.Indexed lr]
-;;             (if (>= k ^long (.nth lr 0))
-;;               (if     (<= k ^long (.nth lr 1))
-;;                 (reduced lr)
-;;                 acc)
-;;               acc)) nil intervals))
-;; (set! *unchecked-math* false)
+;;So if we have a new training interval, we have a couple of cases...
 

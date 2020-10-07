@@ -87,4 +87,5 @@
      :us  (vrange total-units),
      :unit-type unit-type,
      :interval-type interval-type,
-     :msn-demand yearly-demands}))
+     :msn-demand yearly-demands
+     :type->units (group-by unit-type us)}))
